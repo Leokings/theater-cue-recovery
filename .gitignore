@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.venv/
+.artifacts/
+.gltest_cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.log
+coverage.xml
+wallet*
+*keystore*
+*private-key*
+*mnemonic*
+

@@ -1,0 +1,125 @@
+{
+  "ctor": {
+    "params": [
+      [
+        "rehearsal_scope",
+        "string"
+      ]
+    ],
+    "kwparams": {}
+  },
+  "methods": {
+    "acknowledge_recovery": {
+      "params": [
+        [
+          "incident_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "choose_recovery": {
+      "params": [
+        [
+          "incident_id",
+          "string"
+        ],
+        [
+          "action",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "get_incident": {
+      "params": [
+        [
+          "incident_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "get_policy": {
+      "params": [],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "get_rehearsal": {
+      "params": [],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "register_cue": {
+      "params": [
+        [
+          "cue_id",
+          "string"
+        ],
+        [
+          "predecessor_id",
+          "string"
+        ],
+        [
+          "description",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "report_incident": {
+      "params": [
+        [
+          "incident_id",
+          "string"
+        ],
+        [
+          "public_rehearsal_report",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "seal_cue_sheet": {
+      "params": [],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "triage_incident": {
+      "params": [
+        [
+          "incident_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    }
+  }
+}

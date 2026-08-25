@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "network": "studionet",
+  "batch": 2,
+  "tested_on": "2026-08-25",
+  "batch_wallet": "0x9A4eE2aFeD53C517Ef5cd722ba94956AFE2A7b3d",
+  "contract_address": "0xB8A34029eddB732200500Ec4E55AD3C140BE345f",
+  "deploy_tx": "0x695e2e7ed2f597909b6c7fd71669a006897f06ca8152f2370579e2368a4fee3c",
+  "intelligent_tx": "0x1a526e54db0c492db9c509ce96438b10e3e0f864c60c4a1c26198a1a90fcc94c",
+  "observed": {
+    "anchor": "C2",
+    "impact": "LOCAL"
+  }
+}
