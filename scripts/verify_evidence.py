@@ -363,8 +363,8 @@ def _decision_ok(value: dict[str, Any]) -> bool:
 
 def _transaction_checks(data: dict[str, Any], report: Report) -> list[dict[str, Any]]:
     txs: list[dict[str, Any]] = data["transactions"]
-    address = data["deployment"]["contract_address"].lower()
-    deployer = data["deployment"]["deployer"].lower()
+    address = data["contract"]["address"].lower()
+    deployer = data["contract"]["deployer"].lower()
     explorer_host = urlparse(data["network"]["explorer_url"]).netloc.lower()
     hashes: set[str] = set()
     purposes: list[str] = []
@@ -382,7 +382,7 @@ def _transaction_checks(data: dict[str, Any], report: Report) -> list[dict[str, 
             report.error(f"{at}.tx_hash", "duplicate transaction hash")
         hashes.add(tx_hash)
         if tx["to"].lower() != address:
-            report.error(f"{at}.to", "must equal deployment contract address")
+            report.error(f"{at}.to", "must equal the outer/routable contract address")
         if purpose == "deploy" and tx["from"].lower() != deployer:
             report.error(f"{at}.from", "deployment must be sent by deployer")
         link = urlparse(tx["explorer_url"])
@@ -486,6 +486,27 @@ def _chain_id_checks(data: dict[str, Any], report: Report) -> None:
         )
 
 
+def _address_checks(data: dict[str, Any], report: Report) -> None:
+    """Bind contract readbacks to the GenVM address, not the routable address."""
+    readbacks = data["latest_final"]["readbacks"]
+    outer_address = data["contract"]["address"].lower()
+    genvm_address = data["contract"]["genvm_address"].lower()
+    zero = "0x" + "0" * 40
+    if outer_address == zero:
+        report.error("$.contract.address", "outer/routable address cannot be zero")
+    if genvm_address == zero:
+        report.error("$.contract.genvm_address", "GenVM address cannot be zero")
+    policy_address = readbacks["get_policy"]["result"]["deployment_contract_address"].lower()
+    rehearsal_address = readbacks["get_rehearsal"]["result"]["deployment_contract_address"].lower()
+    if policy_address != rehearsal_address:
+        report.error("$.latest_final.readbacks", "policy and rehearsal GenVM addresses differ")
+    if policy_address != genvm_address:
+        report.error(
+            "$.contract.genvm_address",
+            "does not match the GenVM contract address in final readbacks",
+        )
+
+
 def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Report) -> None:
     latest = data["latest_final"]
     readbacks = latest["readbacks"]
@@ -504,25 +525,22 @@ def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Repor
         if readbacks[name]["args"] != []:
             report.error(f"$.latest_final.readbacks.{name}.args", "must be empty")
     _chain_id_checks(data, report)
-    contract = data["deployment"]["contract_address"].lower()
-    deployer = data["deployment"]["deployer"].lower()
-    constructor = data["deployment"]["constructor"]
+    _address_checks(data, report)
+    deployer = data["contract"]["deployer"].lower()
+    constructor = data["contract"]["constructor"]
     fixture = sha256(canonical({"args": constructor["args"], "kwargs": constructor["kwargs"]}))
     if constructor["fixture_sha256"] != fixture:
-        report.error("$.deployment.constructor.fixture_sha256", f"digest mismatch; actual {fixture}")
+        report.error("$.contract.constructor.fixture_sha256", f"digest mismatch; actual {fixture}")
     if constructor["kwargs"] or not all(isinstance(value, str) for value in constructor["args"]):
-        report.error("$.deployment.constructor", "V2 requires two positional strings and no kwargs")
+        report.error("$.contract.constructor", "V2 requires two positional strings and no kwargs")
 
     for name, view in (("get_rehearsal", rehearsal), ("get_policy", policy)):
         at = f"$.latest_final.readbacks.{name}.result"
-        if view["deployment_contract_address"].lower() != contract:
-            report.error(f"{at}.deployment_contract_address", "does not match deployment address")
         if view["stage_manager"].lower() != deployer:
             report.error(f"{at}.stage_manager", "does not match deployer")
         if [view["rehearsal_id"], view["rehearsal_scope"]] != constructor["args"]:
             report.error(at, "rehearsal identity does not match constructor fixture")
     shared = (
-        "deployment_contract_address",
         "stage_manager",
         "rehearsal_id",
         "rehearsal_scope",
@@ -712,6 +730,23 @@ def _evidence_checks(data: dict[str, Any], root: Path, files: bool, report: Repo
             report.error("$.raw_capture.record.network", "outer/configured equality metadata is incorrect")
         if raw_network.get("outer_rpc_equality_required") is True and not matches:
             report.error("$.raw_capture.record.network", "required outer/configured chain equality failed")
+    raw_record = capture["record"]
+    raw_outer_address = raw_record.get("contract_address")
+    raw_genvm_address = raw_record.get("genvm_contract_address")
+    if not isinstance(raw_outer_address, str) or raw_outer_address.lower() != data["contract"]["address"].lower():
+        report.error("$.contract.address", "does not match the raw outer/routable address")
+    if not isinstance(raw_genvm_address, str) or raw_genvm_address.lower() != data["contract"]["genvm_address"].lower():
+        report.error("$.contract.genvm_address", "does not match the raw GenVM address")
+    if raw_record.get("contract_address_domain") != "OUTER_ROUTABLE":
+        report.error("$.raw_capture.record.contract_address_domain", "must equal OUTER_ROUTABLE")
+    if raw_record.get("genvm_contract_address_verified_by_readbacks") is not True:
+        report.error("$.raw_capture.record.genvm_contract_address", "was not verified by readbacks")
+    expected_address_source = (
+        "get_policy.deployment_contract_address|"
+        "get_rehearsal.deployment_contract_address"
+    )
+    if raw_record.get("genvm_contract_address_source") != expected_address_source:
+        report.error("$.raw_capture.record.genvm_contract_address_source", "is not the final-readback source")
     if files:
         _repository_checks(data, root, report)
     else:
@@ -939,7 +974,7 @@ def _normalize_tx(
             "args": f"transactions.{label}.submission_intent.args",
             "created_at": "receipt.created_at",
             "from": f"transactions.{label}.submission_intent.sender",
-            "to": "receipt.to_address|receipt.recipient|contract_address",
+            "to": "receipt.to_address|receipt.recipient|contract_address(OUTER_ROUTABLE)",
             "status": "receipt.status_name",
             "result": "receipt.result_name",
             "rounds": "receipt.num_of_rounds",
@@ -1000,6 +1035,25 @@ def normalize(raw: Any, root: Path) -> dict[str, Any]:
         raise JsonError("raw checkpoint final readbacks are incomplete") from exc
     if policy.get("deployment_chain_id") != rehearsal.get("deployment_chain_id"):
         raise JsonError("raw policy and rehearsal GenVM message chain IDs differ")
+    policy_address = policy.get("deployment_contract_address")
+    rehearsal_address = rehearsal.get("deployment_contract_address")
+    if not isinstance(policy_address, str) or not isinstance(rehearsal_address, str):
+        raise JsonError("raw policy and rehearsal omit the GenVM contract address")
+    if policy_address.lower() != rehearsal_address.lower():
+        raise JsonError("raw policy and rehearsal GenVM contract addresses differ")
+    raw_genvm_address = raw.get("genvm_contract_address")
+    if not isinstance(raw_genvm_address, str) or raw_genvm_address.lower() != policy_address.lower():
+        raise JsonError("raw GenVM contract address differs from final readbacks")
+    if raw.get("contract_address_domain") != "OUTER_ROUTABLE":
+        raise JsonError("raw contract address is not marked OUTER_ROUTABLE")
+    if raw.get("genvm_contract_address_verified_by_readbacks") is not True:
+        raise JsonError("raw GenVM contract address was not verified by readbacks")
+    expected_address_source = (
+        "get_policy.deployment_contract_address|"
+        "get_rehearsal.deployment_contract_address"
+    )
+    if raw.get("genvm_contract_address_source") != expected_address_source:
+        raise JsonError("raw GenVM contract address source is not the final readbacks")
     raw_network = raw.get("network")
     if not isinstance(raw_network, dict) or raw_network.get("outer_rpc_chain_id_verified") is not True:
         raise JsonError("raw checkpoint lacks a verified outer RPC chain ID")
@@ -1070,9 +1124,10 @@ def normalize(raw: Any, root: Path) -> dict[str, Any]:
             "abi_schema_sha256": sha256(canonical_document(abi_path.read_bytes())),
             "abi_canonicalization": "json-sort-keys-compact-utf8",
         },
-        "deployment": {
+        "contract": {
             "deployer": raw["manager"],
-            "contract_address": raw["contract_address"],
+            "address": raw["contract_address"],
+            "genvm_address": raw_genvm_address,
             "constructor": constructor,
         },
         "transactions": [

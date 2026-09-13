@@ -27,7 +27,11 @@ def evidence_module():
 
 
 def test_deploy_harness_has_closed_network_and_lifecycle_fixtures(deploy_module):
-    assert deploy_module["ALLOWED_NETWORKS"] == {"localnet", "testnet_bradbury"}
+    assert deploy_module["ALLOWED_NETWORKS"] == {
+        "localnet",
+        "studionet",
+        "testnet_bradbury",
+    }
     assert deploy_module["STEPS"] == [
         "authorize_reporter",
         "register_cue_open",
@@ -147,6 +151,46 @@ def test_deploy_harness_binds_genvm_chain_id_without_overwriting_outer_domains(
         )
 
 
+def test_deploy_harness_binds_genvm_contract_without_overwriting_routable_address(
+    deploy_module,
+):
+    routable = "0x" + "11" * 20
+    genvm = "0x" + "22" * 20
+    record = {
+        "contract_address": routable,
+        "contract_address_domain": "OUTER_ROUTABLE",
+        "genvm_contract_address": None,
+        "genvm_contract_address_source": "PENDING_DEPLOYMENT_READBACK",
+        "genvm_contract_address_verified_by_readbacks": False,
+    }
+    readbacks = {
+        "policy": {"deployment_contract_address": genvm.upper().replace("0X", "0x")},
+        "rehearsal": {"deployment_contract_address": genvm},
+    }
+
+    assert deploy_module["_bind_genvm_contract_domain"](record, readbacks) == genvm
+    assert record["contract_address"] == routable
+    assert record["contract_address_domain"] == "OUTER_ROUTABLE"
+    assert record["genvm_contract_address"] == genvm
+    assert record["genvm_contract_address_source"] == (
+        "get_policy.deployment_contract_address|"
+        "get_rehearsal.deployment_contract_address"
+    )
+    assert record["genvm_contract_address_verified_by_readbacks"] is True
+
+    with pytest.raises(
+        AssertionError,
+        match="policy and rehearsal GenVM contract addresses are inconsistent",
+    ):
+        deploy_module["_bind_genvm_contract_domain"](
+            record,
+            {
+                "policy": {"deployment_contract_address": genvm},
+                "rehearsal": {"deployment_contract_address": "0x" + "33" * 20},
+            },
+        )
+
+
 def test_deploy_harness_records_outer_rpc_and_configured_chain_ids_independently(
     deploy_module, monkeypatch
 ):
@@ -190,8 +234,17 @@ def test_deploy_harness_records_outer_rpc_and_configured_chain_ids_independently
     assert local["genvm_chain_id"] is None
     assert "chain_id" not in local
 
-    with pytest.raises(AssertionError, match="Bradbury outer RPC chain ID differs"):
+    with pytest.raises(
+        AssertionError,
+        match="testnet_bradbury outer RPC chain ID differs from configuration",
+    ):
         network_record(General("testnet_bradbury"))
+
+    with pytest.raises(
+        AssertionError,
+        match="studionet outer RPC chain ID differs from configuration",
+    ):
+        network_record(General("studionet"))
 
 
 def verifier(*args: str) -> subprocess.CompletedProcess[str]:
@@ -243,6 +296,49 @@ def test_evidence_chain_ids_keep_outer_rpc_and_genvm_message_domains_separate(
     mismatch_report = evidence_module["Report"]("mismatched-genvm-readbacks")
     evidence_module["_chain_id_checks"](mismatched, mismatch_report)
     assert any("policy and rehearsal message chain IDs differ" in error for error in mismatch_report.errors)
+
+
+def test_evidence_contract_addresses_keep_routable_and_genvm_domains_separate(
+    evidence_module,
+):
+    routable = "0x" + "11" * 20
+    genvm = "0x" + "22" * 20
+    data = {
+        "contract": {
+            "address": routable,
+            "genvm_address": genvm,
+        },
+        "latest_final": {
+            "readbacks": {
+                "get_policy": {
+                    "result": {"deployment_contract_address": genvm.upper().replace("0X", "0x")}
+                },
+                "get_rehearsal": {
+                    "result": {"deployment_contract_address": genvm}
+                },
+            }
+        },
+    }
+    report = evidence_module["Report"]("distinct-address-domains")
+    evidence_module["_address_checks"](data, report)
+    assert report.errors == []
+
+    data["latest_final"]["readbacks"]["get_rehearsal"]["result"][
+        "deployment_contract_address"
+    ] = "0x" + "33" * 20
+    mismatch_report = evidence_module["Report"]("mismatched-genvm-addresses")
+    evidence_module["_address_checks"](data, mismatch_report)
+    assert any(
+        "policy and rehearsal GenVM addresses differ" in error
+        for error in mismatch_report.errors
+    )
+
+    schema = evidence_module["load_json"](ROOT / "deployments" / "schema.json")
+    address_shape = schema["$defs"]["address"]
+    malformed = evidence_module["schema_errors"](
+        "0x1234", address_shape, schema, "$.contract.address"
+    )
+    assert malformed == ["$.contract.address: does not match the required pattern"]
 
 
 def test_legacy_evidence_is_accepted_only_without_evidence_grade_requirement():

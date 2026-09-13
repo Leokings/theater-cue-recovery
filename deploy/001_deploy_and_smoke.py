@@ -1,6 +1,11 @@
 """Deploy V2 and record a finalized, commit-bound full-lifecycle proof.
 
-Localnet:
+StudioNet release proof (manager and distinct reporter must both be funded):
+    $env:THEATER_SOURCE_COMMIT = (git rev-parse HEAD)
+    $env:THEATER_DEPLOY_NETWORK = "studionet"
+    gltest deploy/001_deploy_and_smoke.py -v -s --network studionet
+
+Localnet verification:
     $env:THEATER_SOURCE_COMMIT = (git rev-parse HEAD)
     $env:THEATER_DEPLOY_NETWORK = "localnet"
     gltest deploy/001_deploy_and_smoke.py -v -s --network localnet
@@ -42,7 +47,7 @@ CONTRACT = ROOT / "contracts" / "theater_cue_recovery.py"
 ABI = ROOT / "abi.json"
 HARNESS = Path(__file__).resolve()
 REPOSITORY = "https://github.com/Leokings/theater-cue-recovery"
-ALLOWED_NETWORKS = {"localnet", "testnet_bradbury"}
+ALLOWED_NETWORKS = {"localnet", "studionet", "testnet_bradbury"}
 PORTABLE_INPUT_LIMIT = 50_000
 DEFAULT_BRADBURY_GAS = 60_000_000
 
@@ -197,6 +202,18 @@ def _public_url(value: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
+def _normalized_address(value: Any, label: str) -> str:
+    address = str(value).lower()
+    if (
+        len(address) != 42
+        or not address.startswith("0x")
+        or any(char not in "0123456789abcdef" for char in address[2:])
+        or address == "0x" + "0" * 40
+    ):
+        raise AssertionError(f"{label} is not a nonzero 20-byte hex address")
+    return address
+
+
 def _network_record(general: Any) -> dict[str, Any]:
     chain = general.get_chain()
     network_name = general.get_network_name()
@@ -210,9 +227,11 @@ def _network_record(general: Any) -> dict[str, Any]:
     else:
         raise AssertionError(f"unsupported eth_chainId response: {response!r}")
     matches_config = live_chain_id == configured_chain_id
-    equality_required = network_name == "testnet_bradbury"
+    equality_required = network_name != "localnet"
     if equality_required and not matches_config:
-        raise AssertionError("Bradbury outer RPC chain ID differs from configuration")
+        raise AssertionError(
+            f"{network_name} outer RPC chain ID differs from configuration"
+        )
     return {
         "name": network_name,
         "chain_name": str(chain.name),
@@ -231,15 +250,21 @@ def _network_record(general: Any) -> dict[str, Any]:
 
 
 def _accounts(network: str) -> tuple[Any, Any]:
-    def from_environment(name: str) -> Any:
+    def from_environment(*names: str) -> Any:
+        name = next((item for item in names if os.environ.get(item, "").strip()), names[0])
         key = os.environ.get(name, "").strip()
         raw = key[2:] if key.startswith("0x") else key
         if len(raw) != 64 or any(char.lower() not in "0123456789abcdef" for char in raw):
             raise AssertionError(f"{name} is not a 32-byte hex key")
         return create_account(bytes.fromhex(raw))
 
-    if network == "testnet_bradbury":
-        manager = from_environment("BRADBURY_GLTEST_PRIVATE_KEY")
+    if network == "studionet":
+        manager = from_environment("THEATER_MANAGER_PRIVATE_KEY")
+        reporter = from_environment("THEATER_REPORTER_PRIVATE_KEY")
+    elif network == "testnet_bradbury":
+        manager = from_environment(
+            "THEATER_MANAGER_PRIVATE_KEY", "BRADBURY_GLTEST_PRIVATE_KEY"
+        )
         reporter = from_environment("THEATER_REPORTER_PRIVATE_KEY")
     else:
         manager = create_account(
@@ -532,6 +557,33 @@ def _bind_genvm_chain_domain(
     return policy_chain_id
 
 
+def _bind_genvm_contract_domain(
+    record: dict[str, Any], readbacks: dict[str, Any]
+) -> str:
+    policy_address = _normalized_address(
+        readbacks["policy"]["deployment_contract_address"],
+        "policy GenVM contract address",
+    )
+    rehearsal_address = _normalized_address(
+        readbacks["rehearsal"]["deployment_contract_address"],
+        "rehearsal GenVM contract address",
+    )
+    if policy_address != rehearsal_address:
+        raise AssertionError("policy and rehearsal GenVM contract addresses are inconsistent")
+    existing = record.get("genvm_contract_address")
+    if existing is not None and _normalized_address(
+        existing, "checkpoint GenVM contract address"
+    ) != policy_address:
+        raise AssertionError("GenVM contract address changed after the deployment checkpoint")
+    record["genvm_contract_address"] = policy_address
+    record["genvm_contract_address_source"] = (
+        "get_policy.deployment_contract_address|"
+        "get_rehearsal.deployment_contract_address"
+    )
+    record["genvm_contract_address_verified_by_readbacks"] = True
+    return policy_address
+
+
 def _digest(value: Any, label: str) -> str:
     if not isinstance(value, str) or len(value) != 64 or any(
         char not in "0123456789abcdef" for char in value
@@ -579,7 +631,11 @@ def _assert_progress(completed: int, views: dict[str, Any], reporter: str) -> No
 
 
 def _assert_final(
-    views: dict[str, Any], manager: str, reporter: str, address: str, genvm_chain_id: int
+    views: dict[str, Any],
+    manager: str,
+    reporter: str,
+    genvm_contract_address: str,
+    genvm_chain_id: int,
 ) -> dict[str, str]:
     _assert_progress(9, views, reporter)
     policy, rehearsal = views["policy"], views["rehearsal"]
@@ -591,8 +647,10 @@ def _assert_final(
         raise AssertionError("policy GenVM chain binding differs from proof")
     if int(rehearsal["deployment_chain_id"]) != genvm_chain_id:
         raise AssertionError("rehearsal GenVM chain binding differs from proof")
-    if str(policy["deployment_contract_address"]).lower() != address:
-        raise AssertionError("contract self-address differs from proof")
+    if str(policy["deployment_contract_address"]).lower() != genvm_contract_address:
+        raise AssertionError("policy GenVM contract address differs from proof")
+    if str(rehearsal["deployment_contract_address"]).lower() != genvm_contract_address:
+        raise AssertionError("rehearsal GenVM contract address differs from proof")
     if str(policy["stage_manager"]).lower() != manager:
         raise AssertionError("manager differs from deployment signer")
     if policy["rehearsal_id"] != REHEARSAL_ID or policy["rehearsal_scope"] != SCOPE:
@@ -724,6 +782,7 @@ def _clear_pending(
     if contract is not None:
         live = _all_readbacks(contract, manager, reporter)
         _bind_genvm_chain_domain(record, live)
+        _bind_genvm_contract_domain(record, live)
         if _readback_hash(live) != record["latest_final_readbacks_sha256"]:
             raise AssertionError("LATEST_FINAL changed after uncertain submission")
     record.setdefault("operator_resume_assertions", []).append(
@@ -760,6 +819,7 @@ def _run_step(
         _clear_pending(record, path, contract, manager, reporter)
         before = _all_readbacks(contract, manager, reporter)
         _bind_genvm_chain_domain(record, before)
+        _bind_genvm_contract_domain(record, before)
         if _readback_hash(before) != record["latest_final_readbacks_sha256"]:
             raise AssertionError(f"LATEST_FINAL changed before {label}")
         _begin(record, path, label, sender, args)
@@ -783,6 +843,7 @@ def _run_step(
         _write(path, record)
     views = _all_readbacks(contract, manager, reporter)
     _bind_genvm_chain_domain(record, views)
+    _bind_genvm_contract_domain(record, views)
     _assert_progress(index + 1, views, reporter)
     record["completed_steps"] = index + 1
     record["checkpoint_stage"] = label
@@ -801,7 +862,9 @@ def test_deploy_and_smoke_finalized() -> None:
     network_name = general.get_network_name()
     configured = os.environ.get("THEATER_DEPLOY_NETWORK", network_name)
     if configured != network_name or network_name not in ALLOWED_NETWORKS:
-        raise AssertionError("selected network must match localnet or testnet_bradbury")
+        raise AssertionError(
+            "selected network must match localnet, studionet, or testnet_bradbury"
+        )
     source_commit = _source_commit()
     _abi_preflight()
     network = _network_record(general)
@@ -833,6 +896,7 @@ def test_deploy_and_smoke_finalized() -> None:
         "network_name": network_name,
         "configured_chain_id": network["configured_chain_id"],
         "outer_rpc_chain_id": network["outer_rpc_chain_id"],
+        "contract_address_domain": "OUTER_ROUTABLE",
         "source_commit": source_commit,
         "source_sha256": source["sha256"],
         "abi_sha256": abi["sha256"],
@@ -863,6 +927,9 @@ def test_deploy_and_smoke_finalized() -> None:
             "constructor": constructor,
             "deployment_input_bytes": source["bytes"] + constructor["bytes"],
             "contract_address": "",
+            "genvm_contract_address": None,
+            "genvm_contract_address_source": "PENDING_DEPLOYMENT_READBACK",
+            "genvm_contract_address_verified_by_readbacks": False,
             "genvm_chain_id": None,
             "completed_steps": 0,
             "checkpoint_stage": "PRE_DEPLOY",
@@ -932,13 +999,20 @@ def test_deploy_and_smoke_finalized() -> None:
         deployment_proof["submission_intent"] = record["pending_operation"]
         deployment_proof["finalized_recorded_at"] = _now()
         record["transactions"]["deployment"] = deployment_proof
-        record["contract_address"] = str(extract_contract_address(deployed)).lower()
+        record["contract_address"] = _normalized_address(
+            extract_contract_address(deployed), "outer routable contract address"
+        )
         record["deployment_gas_override"] = gas_override
         record["pending_operation"] = None
         record["record_status"] = "DEPLOYMENT_FINALIZED_READBACK_PENDING"
         _write(path, record)
     elif "deployment" not in record["transactions"]:
         raise AssertionError("contract address exists without a deployment receipt")
+    if record.get("contract_address_domain") != "OUTER_ROUTABLE":
+        raise AssertionError("contract address domain is not OUTER_ROUTABLE")
+    record["contract_address"] = _normalized_address(
+        record["contract_address"], "checkpoint outer routable contract address"
+    )
 
     contract: Any = factory.build_contract(
         record["contract_address"], account=manager_account
@@ -947,6 +1021,7 @@ def test_deploy_and_smoke_finalized() -> None:
     if not record["latest_final_readbacks_sha256"]:
         views = _all_readbacks(contract, manager, reporter)
         _bind_genvm_chain_domain(record, views)
+        _bind_genvm_contract_domain(record, views)
         _assert_progress(0, views, reporter)
         record["latest_final_readbacks_sha256"] = _readback_hash(views)
         record["latest_final_checkpoint"] = {
@@ -963,6 +1038,7 @@ def test_deploy_and_smoke_finalized() -> None:
         if not finalized_next:
             live = _all_readbacks(contract, manager, reporter)
             _bind_genvm_chain_domain(record, live)
+            _bind_genvm_contract_domain(record, live)
             live_hash = _readback_hash(live)
             if live_hash != record["latest_final_readbacks_sha256"]:
                 raise AssertionError("live LATEST_FINAL differs from resumable checkpoint")
@@ -994,11 +1070,12 @@ def test_deploy_and_smoke_finalized() -> None:
 
     final_views = _all_readbacks(contract, manager, reporter)
     genvm_chain_id = _bind_genvm_chain_domain(record, final_views)
+    genvm_contract_address = _bind_genvm_contract_domain(record, final_views)
     lineage = _assert_final(
         final_views,
         manager,
         reporter,
-        record["contract_address"],
+        genvm_contract_address,
         genvm_chain_id,
     )
     if set(record["transactions"]) != {"deployment", *STEPS}:
@@ -1016,4 +1093,5 @@ def test_deploy_and_smoke_finalized() -> None:
     record["updated_at"] = _now()
     _write(path, record)
     print(f"contract_address={record['contract_address']}")
+    print(f"genvm_contract_address={record['genvm_contract_address']}")
     print(f"deployment_proof={path}")

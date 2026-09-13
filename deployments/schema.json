@@ -155,6 +155,7 @@
           "$ref": "#/$defs/address"
         },
         "to": {
+          "description": "Outer/routable contract address used to submit the transaction.",
           "$ref": "#/$defs/address"
         },
         "status": {
@@ -504,7 +505,7 @@
         "generated_at",
         "network",
         "repository",
-        "deployment",
+        "contract",
         "transactions",
         "latest_final",
         "tools",
@@ -613,19 +614,25 @@
             }
           }
         },
-        "deployment": {
+        "contract": {
           "type": "object",
           "additionalProperties": false,
           "required": [
             "deployer",
-            "contract_address",
+            "address",
+            "genvm_address",
             "constructor"
           ],
           "properties": {
             "deployer": {
               "$ref": "#/$defs/address"
             },
-            "contract_address": {
+            "address": {
+              "description": "Outer/routable contract address used for transactions and explorer links.",
+              "$ref": "#/$defs/address"
+            },
+            "genvm_address": {
+              "description": "GenVM contract address returned by matching policy and rehearsal readbacks.",
               "$ref": "#/$defs/address"
             },
             "constructor": {

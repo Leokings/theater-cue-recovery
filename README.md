@@ -114,7 +114,7 @@ The opt-in release harness in `deploy/001_deploy_and_smoke.py` binds a deploymen
 
 ## Evidence status
 
-The old `deployments/studionet.json` record belongs to v1 and is retained only as historical evidence. It must not be presented as proof of this hardened v2 source. The current submission proof and address are recorded separately after a finalized v2 deployment.
+The old `deployments/studionet.json` record belongs to v1 and is retained only as historical evidence. It must not be presented as proof of this hardened v2 source. The current submission target is a fresh StudioNet v2 deployment; its outer address, GenVM address, and normalized proof are recorded separately only after finalized verification.
 
 ## Reuse
 
