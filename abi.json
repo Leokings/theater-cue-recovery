@@ -2,6 +2,10 @@
   "ctor": {
     "params": [
       [
+        "rehearsal_id",
+        "string"
+      ],
+      [
         "rehearsal_scope",
         "string"
       ]
@@ -12,7 +16,23 @@
     "acknowledge_recovery": {
       "params": [
         [
-          "incident_id",
+          "record_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
+    "cancel_incident": {
+      "params": [
+        [
+          "record_id",
+          "string"
+        ],
+        [
+          "reason",
           "string"
         ]
       ],
@@ -24,7 +44,7 @@
     "choose_recovery": {
       "params": [
         [
-          "incident_id",
+          "record_id",
           "string"
         ],
         [
@@ -37,11 +57,50 @@
       "ret": "null",
       "payable": false
     },
+    "get_cue": {
+      "params": [
+        [
+          "cue_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "get_cue_at": {
+      "params": [
+        [
+          "index",
+          "int"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
     "get_incident": {
       "params": [
         [
-          "incident_id",
+          "record_id",
           "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "get_incident_at": {
+      "params": [
+        [
+          "index",
+          "int"
         ]
       ],
       "kwparams": {},
@@ -66,14 +125,36 @@
         "$dict": "any"
       }
     },
+    "get_reporter": {
+      "params": [
+        [
+          "reporter",
+          "address"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
+    "get_reporter_at": {
+      "params": [
+        [
+          "index",
+          "int"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": {
+        "$dict": "any"
+      }
+    },
     "register_cue": {
       "params": [
         [
           "cue_id",
-          "string"
-        ],
-        [
-          "predecessor_id",
           "string"
         ],
         [
@@ -89,7 +170,7 @@
     "report_incident": {
       "params": [
         [
-          "incident_id",
+          "client_reference",
           "string"
         ],
         [
@@ -99,7 +180,7 @@
       ],
       "kwparams": {},
       "readonly": false,
-      "ret": "null",
+      "ret": "string",
       "payable": false
     },
     "seal_cue_sheet": {
@@ -109,10 +190,26 @@
       "ret": "null",
       "payable": false
     },
+    "set_reporter": {
+      "params": [
+        [
+          "reporter",
+          "address"
+        ],
+        [
+          "authorized",
+          "bool"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "null",
+      "payable": false
+    },
     "triage_incident": {
       "params": [
         [
-          "incident_id",
+          "record_id",
           "string"
         ]
       ],

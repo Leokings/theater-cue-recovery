@@ -1,22 +1,28 @@
-Contribution Date: 08/25/2026
+# Portal submission
 
-Title: Theater Cue Recovery
+This file is finalized only after a current-source external deployment reaches finality and its normalized evidence manifest passes strict verification.
 
-Notes / Description:
-Triages rehearsal-only cue incidents against a sealed dependency sheet and records a manager-selected recovery action. This is a fictional or rehearsal coordination aid, never emergency, equipment, workplace, or public-safety advice.
+## Contribution Date
 
-Evidence & Supporting:
+```text
+09/13/2026
+```
 
-Local standalone repository: theater-cue-recovery
+## Title
 
-Contract file: contracts/theater_cue_recovery.py
+```text
+Theater Cue Recovery — Reusable Intelligent Contract
+```
 
-StudioNet evidence: deployments/studionet.json
+## Notes / Description
 
-StudioNet contract: 0xB8A34029eddB732200500Ec4E55AD3C140BE345f
+The final portal-length description is inserted after the exact network verdict, validator votes, address, and digest readback are known. Do not reuse the historical v1 StudioNet claims for v2.
 
-Deployment transaction: 0x695e2e7ed2f597909b6c7fd71669a006897f06ca8152f2370579e2368a4fee3c
+## Evidence & Supporting
 
-Intelligent transaction: 0x1a526e54db0c492db9c509ce96438b10e3e0f864c60c4a1c26198a1a90fcc94c
+1. GitHub repository — `https://github.com/Leokings/theater-cue-recovery`
+2. GenLayer Explorer contract — populated from the verified v2 manifest
+3. Exact commit-pinned contract source — populated after the release commit
+4. Finalized deployment proof — populated after strict manifest verification
 
-Audit status: PASS; see AUDIT.md and deployments/studionet.json
+Category: **Intelligent Contracts**

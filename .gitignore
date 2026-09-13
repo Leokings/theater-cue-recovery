@@ -9,6 +9,8 @@ __pycache__/
 *.py[cod]
 *.log
 coverage.xml
+deployments/*.local.json
+deployments/*.json.tmp
 wallet*
 *keystore*
 *private-key*

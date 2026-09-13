@@ -1,24 +1,61 @@
 # Audit
 
-Status: PASS — final review and submission-blocker audit completed on 08/25/2026.
+Audit date: 2026-09-13
+Release candidate: `2.0.0` / `THEATER_CUE_RECOVERY_V2`
 
-Verification:
+## Verdict
 
-- GenVM lint and semantic validation: PASS
-- Pyright typecheck: PASS, zero errors
-- Direct-mode tests: PASS, 3/3
-- Five-validator GLSim: PASS, 1/1
-- StudioNet finalized execution and LATEST_FINAL readback: PASS
-- ABI-to-source schema comparison: PASS
-- Workspace originality: PASS; 162 contracts scanned, new-corpus maximum 0.4276
-- Runner pin, prompt-injection boundary, source policy, state/role/bounds, forbidden-operation, repository-shape, and secret scans: PASS
+The hardened v2 contract passes the local release audit. Its external-network status is recorded separately in the current deployment manifest; the historical v1 StudioNet address is not evidence for v2.
 
-StudioNet:
+This is a reusable rehearsal-continuity primitive, not production theater-safety software. The audit covers contract behavior and the bundled evidence fixture, not the truth of arbitrary incident reports.
 
-- Batch: 2
-- Public batch wallet: 0x9A4eE2aFeD53C517Ef5cd722ba94956AFE2A7b3d
-- Contract address: 0xB8A34029eddB732200500Ec4E55AD3C140BE345f
-- Deployment transaction: 0x695e2e7ed2f597909b6c7fd71669a006897f06ca8152f2370579e2368a4fee3c
-- Intelligent transaction: 0x1a526e54db0c492db9c509ce96438b10e3e0f864c60c4a1c26198a1a90fcc94c
+## Reproduced checks
 
-Reviewed scope: contracts/theater_cue_recovery.py, repository tests, source policy, security boundary, and deployments/studionet.json.
+| Check | Result |
+|---|---|
+| GenVM lint and semantic validation | PASS — 3/3 checks |
+| Public schema | PASS — 16 methods, 8 write, 8 view, 2 constructor parameters |
+| GenVM-aware Pyright | PASS — 0 diagnostics |
+| Generated `abi.json` versus source | PASS |
+| Offline direct/tooling suite | PASS — 137/137 |
+| Five-validator GLSim | PASS — 4/4 |
+| Evidence-verifier self-test | PASS — 8/8 |
+| Test collection | PASS — 142 total, including one opt-in external-network smoke |
+| Python dependency consistency | PASS |
+
+The tests cover native-value rejection, text and UTF-8 bounds, unsafe Unicode, role transitions, reporter quotas, reference/report/request replay protection, one linear cue sequence, all four semantic statuses, coherent anchor and impact rules, the complete allowed/rejected action matrix, deterministic targets, cancellation and acknowledgement, malformed leader and audit outputs, prompt injection, digest lineage, indexed readbacks, failed-write atomicity, ABI drift, and evidence redaction/validation.
+
+## Findings resolved in v2
+
+1. V1 read `self.cue_ids` inside nondeterministic execution. Its live StudioNet receipt emitted `Detected pickling storage class. Reading storage in nondet mode is not supported`. V2 snapshots every storage value before consensus, and source-structure tests enforce the boundary.
+2. V1 allowed any address to exhaust a permanent 12-incident quota. V2 requires manager-authorized reporters, limits each reporter, separates open and lifetime bounds, and supports append-only manager cancellation that releases open capacity.
+3. V1 forced every report into a cue and impact. V2 adds `AMBIGUOUS`, `INSUFFICIENT_EVIDENCE`, and `OUT_OF_SCOPE`; these cannot carry an invented anchor.
+4. V1 required validators to reproduce a subjective two-field answer exactly. V2 has a three-field leader candidate and an independent one-boolean semantic audit.
+5. V1 permitted branches but did not store a successor target. V2 derives one linear sequence and the exact action target.
+6. V1 canonicalized identifiers inconsistently and exposed incomplete evidence. V2 uses one ASCII identifier policy and complete indexed readbacks with digest provenance.
+7. Integration tests found and fixed ABI string-address handling, Address serialization in views, eager secret interpolation, and JSON Unicode expansion that made valid byte-bounded inputs exceed the prompt ceiling.
+
+## Evidence integrity
+
+The release harness binds source, generated ABI, harness, constructor, Git commit, network and chain. It persists only recursively redacted receipts, commits to each original in-memory receipt by SHA-256, records redaction paths, checkpoints each finalized operation, and verifies all public views through `LATEST_FINAL`.
+
+The normalized evidence manifest is checked by the standard-library verifier and `deployments/schema.json`. A proof is not considered evidence-grade unless the verifier passes with `--require-evidence-grade`.
+
+## Known limitations
+
+- Semantic accuracy is bounded by the supplied public text and validator models.
+- Consensus may be delayed, fail, or be appealed; consumers must wait for finality.
+- GLSim 0.29.2 does not reliably restore leader-proposed state during an all-disagree mock rotation. That simulator-specific case is tested in direct mode; GLSim covers malformed-leader rollback and unauthorized-write rollback instead.
+- The bundled semantic smoke is one unambiguous fixture, not a claim of universal accuracy.
+- The contract records an action but never executes a physical or financial consequence.
+- V1 StudioNet records remain historical and include the unsupported-storage warning; they must not be represented as current-source proof.
+
+## Commands
+
+```powershell
+genvm-lint check contracts\theater_cue_recovery.py --json
+genvm-lint typecheck contracts\theater_cue_recovery.py
+pytest tests\direct -q
+pytest tests\integration\test_glsim_consensus.py -q
+python scripts\verify_evidence.py --self-test
+```

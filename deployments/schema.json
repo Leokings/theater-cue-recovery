@@ -1,0 +1,897 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Leokings/theater-cue-recovery/raw/main/deployments/schema.json",
+  "title": "Theater Cue Recovery deployment evidence",
+  "description": "Validates either the original compact StudioNet record or an evidence-grade, commit-bound deployment manifest.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/evidenceManifest"
+    },
+    {
+      "$ref": "#/$defs/legacyManifest"
+    }
+  ],
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]{40}$"
+    },
+    "txHash": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]{64}$"
+    },
+    "hexSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hexSha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "related_tx": {
+          "$ref": "#/$defs/txHash"
+        }
+      }
+    },
+    "votes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "agree",
+        "disagree",
+        "idle",
+        "other",
+        "evidence_path"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "agree": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "disagree": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idle": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "transaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "purpose",
+        "tx_hash",
+        "method",
+        "args",
+        "args_sha256",
+        "created_at",
+        "from",
+        "to",
+        "status",
+        "result",
+        "rounds",
+        "votes",
+        "execution",
+        "equality_output",
+        "evidence_paths",
+        "explorer_url",
+        "warnings"
+      ],
+      "properties": {
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "purpose": {
+          "enum": [
+            "deploy",
+            "set_reporter",
+            "register_cue",
+            "seal_cue_sheet",
+            "report_incident",
+            "triage_incident",
+            "choose_recovery",
+            "acknowledge_recovery",
+            "cancel_incident"
+          ]
+        },
+        "tx_hash": {
+          "$ref": "#/$defs/txHash"
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "args": {
+          "type": "array"
+        },
+        "args_sha256": {
+          "$ref": "#/$defs/hexSha256"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "from": {
+          "$ref": "#/$defs/address"
+        },
+        "to": {
+          "$ref": "#/$defs/address"
+        },
+        "status": {
+          "const": "FINALIZED"
+        },
+        "result": {
+          "enum": [
+            "AGREE",
+            "MAJORITY_AGREE"
+          ]
+        },
+        "rounds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "votes": {
+          "$ref": "#/$defs/votes"
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leader",
+            "return_status",
+            "state_hash",
+            "stderr"
+          ],
+          "properties": {
+            "leader": {
+              "const": "SUCCESS"
+            },
+            "return_status": {
+              "const": "return"
+            },
+            "state_hash": {
+              "oneOf": [
+                {"type": "null"},
+                {"type": "string", "pattern": "^(0x)?[0-9a-f]{64}$"}
+              ]
+            },
+            "stderr": {
+              "type": "string"
+            }
+          }
+        },
+        "equality_output": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "minProperties": 1
+            }
+          ]
+        },
+        "evidence_paths": {
+          "type": "object",
+          "minProperties": 5,
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "explorer_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/note"
+          }
+        }
+      }
+    },
+    "digestOrEmpty": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{64}$"
+    },
+    "incidentResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "client_reference",
+        "report",
+        "reporter",
+        "reporter_policy_version",
+        "reporter_policy_digest",
+        "workflow",
+        "decision_status",
+        "anchor_index",
+        "anchor_cue",
+        "impact",
+        "allowed_actions_json",
+        "summary",
+        "action",
+        "action_target",
+        "acknowledged",
+        "cancel_reason",
+        "reference_digest",
+        "report_digest",
+        "submission_digest",
+        "request_digest",
+        "creation_digest",
+        "decision_digest",
+        "action_digest",
+        "final_digest",
+        "record_digest",
+        "config_digest",
+        "cue_sheet_digest",
+        "policy_version",
+        "source_mode"
+      ],
+      "properties": {
+        "record_id": {"type": "string", "minLength": 1, "maxLength": 20},
+        "client_reference": {"type": "string", "minLength": 1, "maxLength": 48},
+        "report": {"type": "string", "minLength": 35, "maxLength": 1200},
+        "reporter": {"$ref": "#/$defs/address"},
+        "reporter_policy_version": {"type": "integer", "minimum": 1},
+        "reporter_policy_digest": {"$ref": "#/$defs/hexSha256"},
+        "workflow": {
+          "enum": ["REPORTED", "TRIAGED", "ACTION_SELECTED", "ACKNOWLEDGED", "CANCELLED"]
+        },
+        "decision_status": {
+          "enum": ["", "MATCHED", "AMBIGUOUS", "INSUFFICIENT_EVIDENCE", "OUT_OF_SCOPE"]
+        },
+        "anchor_index": {"type": "integer", "minimum": -1, "maximum": 15},
+        "anchor_cue": {"type": "string", "maxLength": 32},
+        "impact": {"enum": ["", "NONE", "LOCAL", "CHAIN", "RESET"]},
+        "allowed_actions_json": {"type": "string", "minLength": 2},
+        "summary": {"type": "string", "maxLength": 128},
+        "action": {
+          "enum": ["", "REPEAT_CUE", "SKIP_TO_SUCCESSOR", "RESET_SEQUENCE", "REQUEST_CLARIFICATION", "CLOSE_NO_ACTION"]
+        },
+        "action_target": {"type": "string", "maxLength": 32},
+        "acknowledged": {"type": "boolean"},
+        "cancel_reason": {
+          "enum": ["", "DUPLICATE_REPORT", "REPORTER_WITHDRAWN", "SUPERSEDED", "ADMINISTRATIVE_CLOSE"]
+        },
+        "reference_digest": {"$ref": "#/$defs/hexSha256"},
+        "report_digest": {"$ref": "#/$defs/hexSha256"},
+        "submission_digest": {"$ref": "#/$defs/hexSha256"},
+        "request_digest": {"$ref": "#/$defs/hexSha256"},
+        "creation_digest": {"$ref": "#/$defs/hexSha256"},
+        "decision_digest": {"$ref": "#/$defs/digestOrEmpty"},
+        "action_digest": {"$ref": "#/$defs/digestOrEmpty"},
+        "final_digest": {"$ref": "#/$defs/digestOrEmpty"},
+        "record_digest": {"$ref": "#/$defs/hexSha256"},
+        "config_digest": {"$ref": "#/$defs/hexSha256"},
+        "cue_sheet_digest": {"$ref": "#/$defs/hexSha256"},
+        "policy_version": {"const": "THEATER_CUE_RECOVERY_V2"},
+        "source_mode": {"const": "ONCHAIN_TEXT_ONLY"}
+      }
+    },
+    "rehearsalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deployment_chain_id",
+        "deployment_contract_address",
+        "stage_manager",
+        "rehearsal_id",
+        "rehearsal_scope",
+        "mode",
+        "cue_count",
+        "reporter_count",
+        "reporter_policy_version",
+        "reporter_policy_digest",
+        "incident_count",
+        "open_incidents",
+        "resolved_incidents",
+        "cancelled_incidents",
+        "inconclusive_incidents",
+        "cue_sheet_json",
+        "cue_sheet_digest",
+        "config_digest",
+        "policy_version"
+      ],
+      "properties": {
+        "deployment_chain_id": {"type": "integer", "minimum": 1},
+        "deployment_contract_address": {"$ref": "#/$defs/address"},
+        "stage_manager": {"$ref": "#/$defs/address"},
+        "rehearsal_id": {"type": "string", "minLength": 1, "maxLength": 32},
+        "rehearsal_scope": {"type": "string", "minLength": 35, "maxLength": 2000},
+        "mode": {"enum": ["CUE_SHEET", "REHEARSAL"]},
+        "cue_count": {"type": "integer", "minimum": 0, "maximum": 16},
+        "reporter_count": {"type": "integer", "minimum": 1, "maximum": 16},
+        "reporter_policy_version": {"type": "integer", "minimum": 1},
+        "reporter_policy_digest": {"$ref": "#/$defs/hexSha256"},
+        "incident_count": {"type": "integer", "minimum": 0, "maximum": 64},
+        "open_incidents": {"type": "integer", "minimum": 0, "maximum": 12},
+        "resolved_incidents": {"type": "integer", "minimum": 0, "maximum": 64},
+        "cancelled_incidents": {"type": "integer", "minimum": 0, "maximum": 64},
+        "inconclusive_incidents": {"type": "integer", "minimum": 0, "maximum": 64},
+        "cue_sheet_json": {"type": "string", "minLength": 2},
+        "cue_sheet_digest": {"$ref": "#/$defs/hexSha256"},
+        "config_digest": {"$ref": "#/$defs/hexSha256"},
+        "policy_version": {"const": "THEATER_CUE_RECOVERY_V2"}
+      }
+    },
+    "policyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "policy_version",
+        "deployment_chain_id",
+        "deployment_contract_address",
+        "stage_manager",
+        "rehearsal_id",
+        "rehearsal_scope",
+        "mode",
+        "reporter_policy_version",
+        "reporter_policy_digest",
+        "cue_sheet_digest",
+        "config_digest",
+        "decision_schema",
+        "validator_schema",
+        "decision_statuses_json",
+        "impacts_json",
+        "actions_json",
+        "cancel_reasons_json",
+        "max_cues",
+        "max_reporters",
+        "max_total_incidents",
+        "max_open_incidents",
+        "max_open_per_reporter",
+        "max_total_per_reporter",
+        "max_prompt_bytes",
+        "linear_sequence",
+        "manager_selects_action",
+        "rehearsal_only",
+        "external_sources",
+        "source_mode",
+        "funds"
+      ],
+      "properties": {
+        "contract_version": {"const": "2.0.0"},
+        "policy_version": {"const": "THEATER_CUE_RECOVERY_V2"},
+        "deployment_chain_id": {"type": "integer", "minimum": 1},
+        "deployment_contract_address": {"$ref": "#/$defs/address"},
+        "stage_manager": {"$ref": "#/$defs/address"},
+        "rehearsal_id": {"type": "string", "minLength": 1, "maxLength": 32},
+        "rehearsal_scope": {"type": "string", "minLength": 35, "maxLength": 2000},
+        "mode": {"enum": ["CUE_SHEET", "REHEARSAL"]},
+        "reporter_policy_version": {"type": "integer", "minimum": 1},
+        "reporter_policy_digest": {"$ref": "#/$defs/hexSha256"},
+        "cue_sheet_digest": {"$ref": "#/$defs/hexSha256"},
+        "config_digest": {"$ref": "#/$defs/hexSha256"},
+        "decision_schema": {"const": "status|anchor_index|impact"},
+        "validator_schema": {"const": "accept"},
+        "decision_statuses_json": {"const": "[\"MATCHED\",\"AMBIGUOUS\",\"INSUFFICIENT_EVIDENCE\",\"OUT_OF_SCOPE\"]"},
+        "impacts_json": {"const": "[\"NONE\",\"LOCAL\",\"CHAIN\",\"RESET\"]"},
+        "actions_json": {"const": "[\"REPEAT_CUE\",\"SKIP_TO_SUCCESSOR\",\"RESET_SEQUENCE\",\"REQUEST_CLARIFICATION\",\"CLOSE_NO_ACTION\"]"},
+        "cancel_reasons_json": {"const": "[\"DUPLICATE_REPORT\",\"REPORTER_WITHDRAWN\",\"SUPERSEDED\",\"ADMINISTRATIVE_CLOSE\"]"},
+        "max_cues": {"const": 16},
+        "max_reporters": {"const": 16},
+        "max_total_incidents": {"const": 64},
+        "max_open_incidents": {"const": 12},
+        "max_open_per_reporter": {"const": 2},
+        "max_total_per_reporter": {"const": 8},
+        "max_prompt_bytes": {"const": 20000},
+        "linear_sequence": {"const": true},
+        "manager_selects_action": {"const": true},
+        "rehearsal_only": {"const": true},
+        "external_sources": {"const": false},
+        "source_mode": {"const": "ONCHAIN_TEXT_ONLY"},
+        "funds": {"const": false}
+      }
+    },
+    "cueResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cue_id", "index", "predecessor", "successor", "description", "cue_sheet_digest"],
+      "properties": {
+        "cue_id": {"type": "string", "minLength": 1, "maxLength": 32},
+        "index": {"type": "integer", "minimum": 0, "maximum": 15},
+        "predecessor": {"type": "string", "minLength": 1, "maxLength": 32},
+        "successor": {"type": "string", "maxLength": 32},
+        "description": {"type": "string", "minLength": 25, "maxLength": 600},
+        "cue_sheet_digest": {"$ref": "#/$defs/hexSha256"}
+      }
+    },
+    "reporterResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reporter", "registered", "authorized", "open_incidents", "total_incidents", "policy_version", "policy_digest"],
+      "properties": {
+        "reporter": {"$ref": "#/$defs/address"},
+        "registered": {"type": "boolean"},
+        "authorized": {"type": "boolean"},
+        "open_incidents": {"type": "integer", "minimum": 0, "maximum": 2},
+        "total_incidents": {"type": "integer", "minimum": 0, "maximum": 8},
+        "policy_version": {"type": "integer", "minimum": 1},
+        "policy_digest": {"$ref": "#/$defs/hexSha256"}
+      }
+    },
+    "cueReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "args", "result"],
+      "properties": {
+        "method": {"const": "get_cue_at"},
+        "args": {
+          "type": "array",
+          "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 15}],
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "result": {"$ref": "#/$defs/cueResult"}
+      }
+    },
+    "reporterReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "args", "result"],
+      "properties": {
+        "method": {"const": "get_reporter_at"},
+        "args": {
+          "type": "array",
+          "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 15}],
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "result": {"$ref": "#/$defs/reporterResult"}
+      }
+    },
+    "readback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "args",
+        "result"
+      ],
+      "properties": {
+        "args": {
+          "type": "array"
+        },
+        "result": {}
+      }
+    },
+    "evidenceManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schema",
+        "generated_at",
+        "network",
+        "repository",
+        "deployment",
+        "transactions",
+        "latest_final",
+        "tools",
+        "limitations",
+        "warnings",
+        "raw_capture"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {
+          "const": "theater-cue-recovery/deployment-evidence/v2"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "chain_id",
+            "rpc_url",
+            "explorer_url"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "chain_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rpc_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "explorer_url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "commit",
+            "contract_path",
+            "abi_path",
+            "contract_git_blob_sha1",
+            "contract_source_sha256",
+            "source_canonicalization",
+            "abi_schema_sha256",
+            "abi_canonicalization"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "commit": {
+              "$ref": "#/$defs/commit"
+            },
+            "contract_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_git_blob_sha1": {
+              "$ref": "#/$defs/hexSha1"
+            },
+            "contract_source_sha256": {
+              "$ref": "#/$defs/hexSha256"
+            },
+            "source_canonicalization": {
+              "const": "utf8-lf"
+            },
+            "abi_schema_sha256": {
+              "$ref": "#/$defs/hexSha256"
+            },
+            "abi_canonicalization": {
+              "const": "json-sort-keys-compact-utf8"
+            }
+          }
+        },
+        "deployment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "deployer",
+            "contract_address",
+            "constructor"
+          ],
+          "properties": {
+            "deployer": {
+              "$ref": "#/$defs/address"
+            },
+            "contract_address": {
+              "$ref": "#/$defs/address"
+            },
+            "constructor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "args",
+                "kwargs",
+                "canonicalization",
+                "fixture_sha256"
+              ],
+              "properties": {
+                "args": {
+                  "type": "array",
+                  "prefixItems": [
+                    {"type": "string", "minLength": 1, "maxLength": 32},
+                    {"type": "string", "minLength": 35, "maxLength": 2000}
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "kwargs": {
+                  "type": "object",
+                  "maxProperties": 0
+                },
+                "canonicalization": {
+                  "const": "json-sort-keys-compact-utf8"
+                },
+                "fixture_sha256": {
+                  "$ref": "#/$defs/hexSha256"
+                }
+              }
+            }
+          }
+        },
+        "transactions": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/transaction"
+          }
+        },
+        "latest_final": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observed_at",
+            "transaction_hash_variant",
+            "readbacks",
+            "readbacks_sha256"
+          ],
+          "properties": {
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "transaction_hash_variant": {
+              "const": "LATEST_FINAL"
+            },
+            "readbacks": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "get_incident",
+                "get_rehearsal",
+                "get_policy",
+                "cues",
+                "reporters"
+              ],
+              "properties": {
+                "get_incident": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/readback"
+                    },
+                    {
+                      "properties": {
+                        "result": {
+                          "$ref": "#/$defs/incidentResult"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "get_rehearsal": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/readback"
+                    },
+                    {
+                      "properties": {
+                        "result": {
+                          "$ref": "#/$defs/rehearsalResult"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "get_policy": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/readback"
+                    },
+                    {
+                      "properties": {
+                        "result": {
+                          "$ref": "#/$defs/policyResult"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "cues": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 16,
+                  "items": {
+                    "$ref": "#/$defs/cueReadback"
+                  }
+                },
+                "reporters": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "items": {
+                    "$ref": "#/$defs/reporterReadback"
+                  }
+                }
+              }
+            },
+            "readbacks_sha256": {
+              "$ref": "#/$defs/hexSha256"
+            }
+          }
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "python",
+            "genlayer_cli",
+            "genlayer_js",
+            "genlayer_test",
+            "genvm_linter",
+            "pyright",
+            "pytest"
+          ],
+          "properties": {
+            "python": {
+              "type": "string",
+              "minLength": 1
+            },
+            "genlayer_cli": {
+              "type": "string",
+              "minLength": 1
+            },
+            "genlayer_js": {
+              "type": "string",
+              "minLength": 1
+            },
+            "genlayer_test": {
+              "type": "string",
+              "minLength": 1
+            },
+            "genvm_linter": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pyright": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pytest": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/note"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/note"
+          }
+        },
+        "raw_capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canonicalization",
+            "original_sha256",
+            "public_sha256",
+            "additional_redactions",
+            "record"
+          ],
+          "properties": {
+            "canonicalization": {"const": "json-sort-keys-compact-utf8"},
+            "original_sha256": {"$ref": "#/$defs/hexSha256"},
+            "public_sha256": {"$ref": "#/$defs/hexSha256"},
+            "additional_redactions": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "record": {"type": "object"}
+          }
+        }
+      }
+    },
+    "legacyManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "network",
+        "batch",
+        "tested_on",
+        "batch_wallet",
+        "contract_address",
+        "deploy_tx",
+        "intelligent_tx",
+        "observed"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "network": {
+          "type": "string",
+          "minLength": 1
+        },
+        "batch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tested_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "batch_wallet": {
+          "$ref": "#/$defs/address"
+        },
+        "contract_address": {
+          "$ref": "#/$defs/address"
+        },
+        "deploy_tx": {
+          "$ref": "#/$defs/txHash"
+        },
+        "intelligent_tx": {
+          "$ref": "#/$defs/txHash"
+        },
+        "observed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "anchor",
+            "impact"
+          ],
+          "properties": {
+            "anchor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "impact": {
+              "enum": [
+                "LOCAL",
+                "CHAIN",
+                "RESET"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
