@@ -381,6 +381,21 @@ def _receipt_proof(receipt: Any, label: str) -> dict[str, Any]:
     }
 
 
+def _failed_receipt_diagnostic(receipt: Any) -> dict[str, Any]:
+    """Persist a credential-redacted failed receipt for release debugging only."""
+    safe = _safe(receipt)
+    if not isinstance(safe, dict):
+        return {"receipt_type": type(safe).__name__}
+    redacted, paths = _redact_receipt(safe)
+    return {
+        "receipt": redacted,
+        "unredacted_receipt_sha256": _sha(_canonical(safe).encode("utf-8")),
+        "redacted_receipt_sha256": _sha(_canonical(redacted).encode("utf-8")),
+        "redaction_paths": paths,
+        "transaction_identifiers": _transaction_ids(redacted),
+    }
+
+
 def _verify_stored_receipt(proof: dict[str, Any], label: str) -> None:
     receipt = proof.get("receipt")
     if not isinstance(receipt, dict):
@@ -995,7 +1010,17 @@ def test_deploy_and_smoke_finalized() -> None:
             }
             _write(path, record)
             raise
-        deployment_proof = _receipt_proof(deployed, "deployment")
+        try:
+            deployment_proof = _receipt_proof(deployed, "deployment")
+        except Exception as error:
+            record["record_status"] = "DEPLOYMENT_FINALIZED_FAILED"
+            record["last_error"] = {
+                "type": type(error).__name__,
+                "message_sha256": _sha(str(error).encode("utf-8")),
+            }
+            record["failed_deployment_diagnostic"] = _failed_receipt_diagnostic(deployed)
+            _write(path, record)
+            raise
         deployment_proof["submission_intent"] = record["pending_operation"]
         deployment_proof["finalized_recorded_at"] = _now()
         record["transactions"]["deployment"] = deployment_proof
