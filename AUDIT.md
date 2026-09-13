@@ -17,10 +17,10 @@ This is a reusable rehearsal-continuity primitive, not production theater-safety
 | Public schema | PASS — 16 methods, 8 write, 8 view, 2 constructor parameters |
 | GenVM-aware Pyright | PASS — 0 diagnostics |
 | Generated `abi.json` versus source | PASS |
-| Offline direct/tooling suite | PASS — 143/143 |
+| Offline direct/tooling suite | PASS — 144/144 |
 | Five-validator GLSim | PASS — 4/4 |
 | Evidence-verifier self-test | PASS — 8/8 |
-| Test collection | PASS — 148 total, including one opt-in external-network smoke |
+| Test collection | PASS — 149 total, including one opt-in external-network smoke |
 | Python dependency consistency | PASS |
 
 The tests cover native-value rejection, text and UTF-8 bounds, unsafe Unicode, role transitions, reporter quotas, reference/report/request replay protection, one linear cue sequence, all four semantic statuses, coherent anchor and impact rules, the complete allowed/rejected action matrix, deterministic targets, cancellation and acknowledgement, malformed leader and audit outputs, prompt injection, digest lineage, indexed readbacks, failed-write atomicity, ABI drift, and evidence redaction/validation.

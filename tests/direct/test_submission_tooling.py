@@ -43,6 +43,14 @@ def test_deploy_harness_has_closed_network_and_lifecycle_fixtures(deploy_module)
         "choose_recovery",
         "acknowledge_recovery",
     ]
+
+
+def test_runner_header_is_followed_by_module_docstring_not_comment():
+    lines = (ROOT / "contracts" / "theater_cue_recovery.py").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    assert lines[0].startswith('# { "Depends": "py-genlayer:')
+    assert lines[1].startswith('"""')
     expected = deploy_module["EXPECTED"]
     assert expected["decision_status"] == "MATCHED"
     assert expected["anchor_index"] == 1
