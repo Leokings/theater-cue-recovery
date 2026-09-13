@@ -5,7 +5,7 @@ Release candidate: `2.0.0` / `THEATER_CUE_RECOVERY_V2`
 
 ## Verdict
 
-The hardened v2 contract passes the local release audit. Its external-network status is recorded separately in the current deployment manifest; the historical v1 StudioNet address is not evidence for v2.
+The hardened v2 contract passes the local release audit. Its current source was also deployed through the canonical StudioNet RPC. The deployment finalized with GenVM `SUCCESS` and Accepted consensus (3 agree, 2 idle after quorum), but StudioNet did not expose the new address through `gen_getContractSchema` or `gen_call` during the capture window. The deployment-only proof therefore does not claim a current-source lifecycle smoke or finalized state readback. The historical v1 StudioNet address is not evidence for v2.
 
 This is a reusable rehearsal-continuity primitive, not production theater-safety software. The audit covers contract behavior and the bundled evidence fixture, not the truth of arbitrary incident reports.
 
@@ -22,6 +22,8 @@ This is a reusable rehearsal-continuity primitive, not production theater-safety
 | Evidence-verifier self-test | PASS — 8/8 |
 | Test collection | PASS — 149 total, including one opt-in external-network smoke |
 | Python dependency consistency | PASS |
+| Current-source StudioNet deployment | PASS — FINALIZED / SUCCESS / Accepted |
+| Current-source StudioNet lifecycle readback | NOT RECORDED — RPC returned contract not found after deployment |
 
 The tests cover native-value rejection, text and UTF-8 bounds, unsafe Unicode, role transitions, reporter quotas, reference/report/request replay protection, one linear cue sequence, all four semantic statuses, coherent anchor and impact rules, the complete allowed/rejected action matrix, deterministic targets, cancellation and acknowledgement, malformed leader and audit outputs, prompt injection, digest lineage, indexed readbacks, failed-write atomicity, ABI drift, and evidence redaction/validation.
 
@@ -49,6 +51,7 @@ The normalized evidence manifest is checked by the standard-library verifier and
 - The bundled semantic smoke is one unambiguous fixture, not a claim of universal accuracy.
 - The contract records an action but never executes a physical or financial consequence.
 - V1 StudioNet records remain historical and include the unsupported-storage warning; they must not be represented as current-source proof.
+- The current-source StudioNet deployment receipt is valid, but the address was unavailable to the StudioNet schema/read RPC during capture; `deployments/studionet-v2-deployment.json` limits its claim accordingly.
 
 ## Commands
 

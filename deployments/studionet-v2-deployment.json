@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "project": "theater-cue-recovery",
+  "evidence_scope": "CURRENT_SOURCE_DEPLOYMENT_ONLY",
+  "record_status": "DEPLOYMENT_FINALIZED_READBACK_UNAVAILABLE",
+  "network": {
+    "name": "studionet",
+    "chain_id": 61999,
+    "rpc": "https://studio.genlayer.com/api",
+    "explorer": "https://explorer-studio.genlayer.com"
+  },
+  "contract_address": "0x62122cb6486bc664084dec8c93ec6a61f1c51016",
+  "deployment_transaction": "0x786d6828903e6b37e82d94e7b7ea94575369d8d34d7008b837157581658f5059",
+  "deployment_result": {
+    "transaction_status": "FINALIZED",
+    "consensus_result": "MAJORITY_AGREE",
+    "genvm_execution": "SUCCESS",
+    "votes": {
+      "agree": 3,
+      "disagree": 0,
+      "idle": 2,
+      "total": 5
+    },
+    "finalized_at": "2026-09-13T22:08:32.956878Z"
+  },
+  "source": {
+    "commit": "1b3203413c6c6f59a45a4388ed8f98d3aca4b786",
+    "path": "contracts/theater_cue_recovery.py",
+    "sha256_utf8_lf": "e481e59c03b6a914d0d2ebcedde2d4cd707f6894d4834397dc6f1de79aadb3b1",
+    "runner_dependency": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6"
+  },
+  "constructor": {
+    "rehearsal_id": "REHEARSAL-DEMO",
+    "rehearsal_scope": "A fictional indoor rehearsal of three ordered dramatic cues; it excludes live safety, emergency, equipment, and workplace decisions."
+  },
+  "verification": {
+    "genvm_lint": "PASS_3_OF_3",
+    "genvm_typecheck": "PASS_0_DIAGNOSTICS",
+    "direct_tests": "PASS_144_OF_144",
+    "five_validator_glsim": "PASS_4_OF_4",
+    "evidence_self_tests": "PASS_8_OF_8"
+  },
+  "readback": {
+    "status": "UNAVAILABLE_DURING_CAPTURE",
+    "attempted_at": "2026-09-13T22:14:08.1211266Z",
+    "rpc_error_code": -32001,
+    "rpc_error": "Contract address not found by gen_getContractSchema/gen_call after finalized deployment",
+    "full_v2_lifecycle_claimed": false
+  },
+  "explorer_links": {
+    "contract": "https://explorer-studio.genlayer.com/address/0x62122cb6486bc664084dec8c93ec6a61f1c51016",
+    "deployment_transaction": "https://explorer-studio.genlayer.com/tx/0x786d6828903e6b37e82d94e7b7ea94575369d8d34d7008b837157581658f5059"
+  },
+  "notes": [
+    "The Explorer exposes the exact deployed source and records FINALIZED, SUCCESS, and Accepted.",
+    "Two validators became idle after the three-agree quorum; this is not represented as five-of-five agreement.",
+    "No current-source write, semantic verdict, or LATEST_FINAL state readback is claimed by this record.",
+    "The earlier deployments/studionet.json file is a separately labeled legacy v1 semantic smoke record."
+  ]
+}
