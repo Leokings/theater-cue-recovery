@@ -471,6 +471,21 @@ def _allowed(status: str, impact: str) -> list[str]:
     return ["CLOSE_NO_ACTION"]
 
 
+def _chain_id_checks(data: dict[str, Any], report: Report) -> None:
+    """Keep outer, configured, and GenVM message-domain chain IDs distinct."""
+    network = data["network"]
+    readbacks = data["latest_final"]["readbacks"]
+    policy_id = readbacks["get_policy"]["result"]["deployment_chain_id"]
+    rehearsal_id = readbacks["get_rehearsal"]["result"]["deployment_chain_id"]
+    if policy_id != rehearsal_id:
+        report.error("$.latest_final.readbacks", "policy and rehearsal message chain IDs differ")
+    if policy_id != network["message_chain_id"]:
+        report.error(
+            "$.network.message_chain_id",
+            "does not match the GenVM message chain ID in final readbacks",
+        )
+
+
 def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Report) -> None:
     latest = data["latest_final"]
     readbacks = latest["readbacks"]
@@ -488,7 +503,7 @@ def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Repor
     for name in ("get_rehearsal", "get_policy"):
         if readbacks[name]["args"] != []:
             report.error(f"$.latest_final.readbacks.{name}.args", "must be empty")
-    chain_id = data["network"]["chain_id"]
+    _chain_id_checks(data, report)
     contract = data["deployment"]["contract_address"].lower()
     deployer = data["deployment"]["deployer"].lower()
     constructor = data["deployment"]["constructor"]
@@ -500,8 +515,6 @@ def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Repor
 
     for name, view in (("get_rehearsal", rehearsal), ("get_policy", policy)):
         at = f"$.latest_final.readbacks.{name}.result"
-        if view["deployment_chain_id"] != chain_id:
-            report.error(f"{at}.deployment_chain_id", "does not match network.chain_id")
         if view["deployment_contract_address"].lower() != contract:
             report.error(f"{at}.deployment_contract_address", "does not match deployment address")
         if view["stage_manager"].lower() != deployer:
@@ -509,7 +522,6 @@ def _final_checks(data: dict[str, Any], txs: list[dict[str, Any]], report: Repor
         if [view["rehearsal_id"], view["rehearsal_scope"]] != constructor["args"]:
             report.error(at, "rehearsal identity does not match constructor fixture")
     shared = (
-        "deployment_chain_id",
         "deployment_contract_address",
         "stage_manager",
         "rehearsal_id",
@@ -682,6 +694,24 @@ def _evidence_checks(data: dict[str, Any], root: Path, files: bool, report: Repo
                     f"$.raw_capture.record.transactions.{label}.redacted_receipt_sha256",
                     f"digest mismatch; actual {receipt_hash}",
                 )
+    raw_network = capture["record"].get("network", {})
+    if isinstance(raw_network, dict):
+        raw_outer = raw_network.get("outer_rpc_chain_id")
+        raw_configured = raw_network.get("configured_chain_id")
+        raw_message = raw_network.get("genvm_chain_id")
+        if raw_outer != data["network"]["chain_id"]:
+            report.error("$.network.chain_id", "does not match the raw live RPC chain ID")
+        if raw_configured != data["network"]["configured_chain_id"]:
+            report.error("$.network.configured_chain_id", "does not match raw network metadata")
+        if raw_message != data["network"]["message_chain_id"]:
+            report.error("$.network.message_chain_id", "does not match the raw GenVM chain ID")
+        if raw_network.get("outer_rpc_chain_id_verified") is not True:
+            report.error("$.raw_capture.record.network", "outer RPC chain ID was not verified")
+        matches = raw_outer == raw_configured
+        if raw_network.get("outer_rpc_chain_id_matches_config") is not matches:
+            report.error("$.raw_capture.record.network", "outer/configured equality metadata is incorrect")
+        if raw_network.get("outer_rpc_equality_required") is True and not matches:
+            report.error("$.raw_capture.record.network", "required outer/configured chain equality failed")
     if files:
         _repository_checks(data, root, report)
     else:
@@ -968,6 +998,21 @@ def normalize(raw: Any, root: Path) -> dict[str, Any]:
         reporters = views["reporters_by_index"]
     except (KeyError, TypeError) as exc:
         raise JsonError("raw checkpoint final readbacks are incomplete") from exc
+    if policy.get("deployment_chain_id") != rehearsal.get("deployment_chain_id"):
+        raise JsonError("raw policy and rehearsal GenVM message chain IDs differ")
+    raw_network = raw.get("network")
+    if not isinstance(raw_network, dict) or raw_network.get("outer_rpc_chain_id_verified") is not True:
+        raise JsonError("raw checkpoint lacks a verified outer RPC chain ID")
+    outer_chain_id = raw_network.get("outer_rpc_chain_id")
+    configured_chain_id = raw_network.get("configured_chain_id")
+    genvm_chain_id = raw_network.get("genvm_chain_id")
+    if genvm_chain_id != policy.get("deployment_chain_id"):
+        raise JsonError("raw network GenVM chain ID differs from final readbacks")
+    matches = outer_chain_id == configured_chain_id
+    if raw_network.get("outer_rpc_chain_id_matches_config") is not matches:
+        raise JsonError("raw outer/configured equality metadata is incorrect")
+    if raw_network.get("outer_rpc_equality_required") is True and not matches:
+        raise JsonError("raw network requires outer/configured equality but they differ")
     readbacks = {
         "get_incident": {"args": [incident_id], "result": incident},
         "get_rehearsal": {"args": [], "result": rehearsal},
@@ -1007,10 +1052,12 @@ def normalize(raw: Any, root: Path) -> dict[str, Any]:
         "schema": EVIDENCE_SCHEMA,
         "generated_at": generated_at,
         "network": {
-            "name": raw["network"]["name"],
-            "chain_id": raw["network"]["chain_id"],
-            "rpc_url": raw["network"]["rpc"],
-            "explorer_url": raw["network"]["explorer"],
+            "name": raw_network["name"],
+            "chain_id": outer_chain_id,
+            "configured_chain_id": configured_chain_id,
+            "message_chain_id": genvm_chain_id,
+            "rpc_url": raw_network["rpc"],
+            "explorer_url": raw_network["explorer"],
         },
         "repository": {
             "url": raw["repository"],

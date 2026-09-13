@@ -21,6 +21,11 @@ def deploy_module():
     return runpy.run_path(str(DEPLOY_HARNESS), run_name="theater_deploy_preflight")
 
 
+@pytest.fixture(scope="module")
+def evidence_module():
+    return runpy.run_path(str(EVIDENCE_VERIFIER), run_name="theater_evidence_preflight")
+
+
 def test_deploy_harness_has_closed_network_and_lifecycle_fixtures(deploy_module):
     assert deploy_module["ALLOWED_NETWORKS"] == {"localnet", "testnet_bradbury"}
     assert deploy_module["STEPS"] == [
@@ -57,6 +62,138 @@ def test_deploy_harness_pins_final_reads_and_scopes_gas_override():
     assert 'os.environ.get("THEATER_BRADBURY_DEPLOY_GAS_OVERRIDE") == "1"' in source
 
 
+def test_deploy_harness_recursively_redacts_receipt_credentials(deploy_module):
+    receipt = {
+        "consensus_data": {
+            "validators": [
+                {
+                    "node_config": {
+                        "private_key": "secret-a",
+                        "privateKey": "secret-b",
+                        "client_secret": "secret-c",
+                        "mnemonic": "secret-d",
+                        "password": "secret-e",
+                        "authorization": "secret-f",
+                        "public_key": "safe-public-key",
+                    }
+                }
+            ]
+        }
+    }
+    redacted, paths = deploy_module["_redact_receipt"](receipt)
+    node = redacted["consensus_data"]["validators"][0]["node_config"]
+    assert node == {
+        "private_key": "[REDACTED]",
+        "privateKey": "[REDACTED]",
+        "client_secret": "[REDACTED]",
+        "mnemonic": "[REDACTED]",
+        "password": "[REDACTED]",
+        "authorization": "[REDACTED]",
+        "public_key": "safe-public-key",
+    }
+    prefix = "receipt.consensus_data.validators[0].node_config."
+    assert set(paths) == {
+        prefix + "private_key",
+        prefix + "privateKey",
+        prefix + "client_secret",
+        prefix + "mnemonic",
+        prefix + "password",
+        prefix + "authorization",
+    }
+    source = DEPLOY_HARNESS.read_text(encoding="utf-8")
+    assert "unredacted_receipt_sha256" in source
+    assert "RECURSIVE_CREDENTIAL_KEYS_V1" in source
+
+
+def test_deploy_harness_binds_genvm_chain_id_without_overwriting_outer_domains(
+    deploy_module,
+):
+    record = {
+        "configured_chain_id": 4_221,
+        "outer_rpc_chain_id": 4_221,
+        "genvm_chain_id": None,
+        "network": {
+            "configured_chain_id": 4_221,
+            "outer_rpc_chain_id": 4_221,
+            "outer_rpc_chain_id_verified": True,
+            "genvm_chain_id": None,
+            "genvm_chain_id_source": "PENDING_DEPLOYMENT_READBACK",
+        },
+    }
+    views = {
+        "policy": {"deployment_chain_id": 1},
+        "rehearsal": {"deployment_chain_id": 1},
+    }
+    assert deploy_module["_bind_genvm_chain_domain"](record, views) == 1
+    assert record["configured_chain_id"] == 4_221
+    assert record["outer_rpc_chain_id"] == 4_221
+    assert record["genvm_chain_id"] == 1
+    assert record["network"]["configured_chain_id"] == 4_221
+    assert record["network"]["outer_rpc_chain_id"] == 4_221
+    assert record["network"]["genvm_chain_id"] == 1
+    assert record["network"]["genvm_chain_id_source"] == (
+        "get_policy.deployment_chain_id|get_rehearsal.deployment_chain_id"
+    )
+    assert "chain_id" not in record
+    assert "chain_id" not in record["network"]
+
+    with pytest.raises(AssertionError, match="GenVM chain IDs are invalid or inconsistent"):
+        deploy_module["_bind_genvm_chain_domain"](
+            record,
+            {
+                "policy": {"deployment_chain_id": 1},
+                "rehearsal": {"deployment_chain_id": 2},
+            },
+        )
+
+
+def test_deploy_harness_records_outer_rpc_and_configured_chain_ids_independently(
+    deploy_module, monkeypatch
+):
+    class Chain:
+        id = 61_999
+        name = "localnet"
+        rpc_urls = {"default": {"http": ["http://127.0.0.1:4000/api"]}}
+        block_explorers = {"default": {"url": "http://127.0.0.1:4000"}}
+        default_number_of_initial_validators = 5
+
+    class General:
+        def __init__(self, name):
+            self.name = name
+
+        def get_chain(self):
+            return Chain()
+
+        def get_network_name(self):
+            return self.name
+
+    class Provider:
+        def __init__(self, chain_id):
+            self.chain_id = chain_id
+
+        def make_request(self, method, args):
+            assert (method, args) == ("eth_chainId", [])
+            return {"result": hex(self.chain_id)}
+
+    class Client:
+        def __init__(self, chain_id):
+            self.provider = Provider(chain_id)
+
+    network_record = deploy_module["_network_record"]
+    monkeypatch.setitem(network_record.__globals__, "get_gl_client", lambda: Client(61_127))
+    local = network_record(General("localnet"))
+    assert local["configured_chain_id"] == 61_999
+    assert local["outer_rpc_chain_id"] == 61_127
+    assert local["outer_rpc_chain_id_verified"] is True
+    assert local["outer_rpc_chain_id_matches_config"] is False
+    assert local["outer_rpc_equality_required"] is False
+    assert local["genvm_chain_id"] is None
+    assert "chain_id" not in local
+
+    with pytest.raises(AssertionError, match="Bradbury outer RPC chain ID differs"):
+        network_record(General("testnet_bradbury"))
+
+
 def verifier(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(EVIDENCE_VERIFIER), *args],
@@ -72,6 +209,40 @@ def test_evidence_verifier_self_test_covers_eight_cases():
     result = verifier("--self-test")
     assert result.returncode == 0, result.stdout
     assert "SELF-TEST PASS: 8 cases" in result.stdout
+
+
+def test_evidence_chain_ids_keep_outer_rpc_and_genvm_message_domains_separate(
+    evidence_module,
+):
+    data = {
+        "network": {
+            "chain_id": 4_221,
+            "configured_chain_id": 4_221,
+            "message_chain_id": 1,
+        },
+        "latest_final": {
+            "readbacks": {
+                "get_policy": {"result": {"deployment_chain_id": 1}},
+                "get_rehearsal": {"result": {"deployment_chain_id": 1}},
+            }
+        },
+    }
+    report = evidence_module["Report"]("outer-4221-genvm-1")
+    evidence_module["_chain_id_checks"](data, report)
+    assert report.errors == []
+
+    mismatched = {
+        **data,
+        "latest_final": {
+            "readbacks": {
+                "get_policy": {"result": {"deployment_chain_id": 1}},
+                "get_rehearsal": {"result": {"deployment_chain_id": 2}},
+            }
+        },
+    }
+    mismatch_report = evidence_module["Report"]("mismatched-genvm-readbacks")
+    evidence_module["_chain_id_checks"](mismatched, mismatch_report)
+    assert any("policy and rehearsal message chain IDs differ" in error for error in mismatch_report.errors)
 
 
 def test_legacy_evidence_is_accepted_only_without_evidence_grade_requirement():

@@ -530,6 +530,8 @@
           "required": [
             "name",
             "chain_id",
+            "configured_chain_id",
+            "message_chain_id",
             "rpc_url",
             "explorer_url"
           ],
@@ -540,6 +542,17 @@
               "maxLength": 80
             },
             "chain_id": {
+              "description": "Live outer-chain ID returned by the deployment RPC (4221 on Bradbury).",
+              "type": "integer",
+              "minimum": 1
+            },
+            "configured_chain_id": {
+              "description": "Chain ID from the deployment client's configured chain metadata.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "message_chain_id": {
+              "description": "GenVM gl.message.chain_id captured by matching policy and rehearsal readbacks.",
               "type": "integer",
               "minimum": 1
             },

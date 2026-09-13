@@ -199,6 +199,8 @@ def _public_url(value: str) -> str:
 
 def _network_record(general: Any) -> dict[str, Any]:
     chain = general.get_chain()
+    network_name = general.get_network_name()
+    configured_chain_id = int(chain.id)
     response = _safe(get_gl_client().provider.make_request("eth_chainId", []))
     result = response.get("result") if isinstance(response, dict) else None
     if isinstance(result, str):
@@ -207,14 +209,21 @@ def _network_record(general: Any) -> dict[str, Any]:
         live_chain_id = result
     else:
         raise AssertionError(f"unsupported eth_chainId response: {response!r}")
-    if live_chain_id != int(chain.id):
-        raise AssertionError("live RPC chain ID differs from gltest configuration")
+    matches_config = live_chain_id == configured_chain_id
+    equality_required = network_name == "testnet_bradbury"
+    if equality_required and not matches_config:
+        raise AssertionError("Bradbury outer RPC chain ID differs from configuration")
     return {
-        "name": general.get_network_name(),
+        "name": network_name,
         "chain_name": str(chain.name),
-        "chain_id": int(chain.id),
-        "live_rpc_chain_id": live_chain_id,
-        "live_rpc_chain_id_verified": True,
+        "configured_chain_id": configured_chain_id,
+        "outer_rpc_chain_id": live_chain_id,
+        "outer_rpc_chain_id_verified": True,
+        "outer_rpc_chain_id_matches_config": matches_config,
+        "outer_rpc_equality_required": equality_required,
+        "genvm_chain_id": None,
+        "genvm_chain_id_source": "PENDING_DEPLOYMENT_READBACK",
+        "genvm_chain_id_verified_by_readbacks": False,
         "rpc": _public_url(str(chain.rpc_urls["default"]["http"][0])),
         "explorer": _public_url(str(chain.block_explorers["default"]["url"])),
         "initial_validator_count": int(chain.default_number_of_initial_validators),
@@ -504,6 +513,25 @@ def _readback_hash(readbacks: dict[str, Any]) -> str:
     return _sha(_canonical(readbacks).encode("utf-8"))
 
 
+def _bind_genvm_chain_domain(
+    record: dict[str, Any], readbacks: dict[str, Any]
+) -> int:
+    policy_chain_id = int(readbacks["policy"]["deployment_chain_id"])
+    rehearsal_chain_id = int(readbacks["rehearsal"]["deployment_chain_id"])
+    if policy_chain_id < 1 or policy_chain_id != rehearsal_chain_id:
+        raise AssertionError("policy and rehearsal GenVM chain IDs are invalid or inconsistent")
+    existing = record.get("genvm_chain_id")
+    if existing is not None and int(existing) != policy_chain_id:
+        raise AssertionError("GenVM chain ID changed after the deployment checkpoint")
+    record["genvm_chain_id"] = policy_chain_id
+    record["network"]["genvm_chain_id"] = policy_chain_id
+    record["network"]["genvm_chain_id_source"] = (
+        "get_policy.deployment_chain_id|get_rehearsal.deployment_chain_id"
+    )
+    record["network"]["genvm_chain_id_verified_by_readbacks"] = True
+    return policy_chain_id
+
+
 def _digest(value: Any, label: str) -> str:
     if not isinstance(value, str) or len(value) != 64 or any(
         char not in "0123456789abcdef" for char in value
@@ -551,7 +579,7 @@ def _assert_progress(completed: int, views: dict[str, Any], reporter: str) -> No
 
 
 def _assert_final(
-    views: dict[str, Any], manager: str, reporter: str, address: str, chain_id: int
+    views: dict[str, Any], manager: str, reporter: str, address: str, genvm_chain_id: int
 ) -> dict[str, str]:
     _assert_progress(9, views, reporter)
     policy, rehearsal = views["policy"], views["rehearsal"]
@@ -559,8 +587,10 @@ def _assert_final(
         raise AssertionError("unexpected contract version")
     if policy["policy_version"] != "THEATER_CUE_RECOVERY_V2":
         raise AssertionError("unexpected policy version")
-    if int(policy["deployment_chain_id"]) != chain_id:
-        raise AssertionError("contract chain binding differs from proof")
+    if int(policy["deployment_chain_id"]) != genvm_chain_id:
+        raise AssertionError("policy GenVM chain binding differs from proof")
+    if int(rehearsal["deployment_chain_id"]) != genvm_chain_id:
+        raise AssertionError("rehearsal GenVM chain binding differs from proof")
     if str(policy["deployment_contract_address"]).lower() != address:
         raise AssertionError("contract self-address differs from proof")
     if str(policy["stage_manager"]).lower() != manager:
@@ -693,6 +723,7 @@ def _clear_pending(
         )
     if contract is not None:
         live = _all_readbacks(contract, manager, reporter)
+        _bind_genvm_chain_domain(record, live)
         if _readback_hash(live) != record["latest_final_readbacks_sha256"]:
             raise AssertionError("LATEST_FINAL changed after uncertain submission")
     record.setdefault("operator_resume_assertions", []).append(
@@ -727,9 +758,9 @@ def _run_step(
         raise AssertionError("checkpoint step index is inconsistent")
     if label not in record["transactions"]:
         _clear_pending(record, path, contract, manager, reporter)
-        if _readback_hash(_all_readbacks(contract, manager, reporter)) != record[
-            "latest_final_readbacks_sha256"
-        ]:
+        before = _all_readbacks(contract, manager, reporter)
+        _bind_genvm_chain_domain(record, before)
+        if _readback_hash(before) != record["latest_final_readbacks_sha256"]:
             raise AssertionError(f"LATEST_FINAL changed before {label}")
         _begin(record, path, label, sender, args)
         try:
@@ -751,6 +782,7 @@ def _run_step(
         record["record_status"] = f"{label.upper()}_FINALIZED_READBACK_PENDING"
         _write(path, record)
     views = _all_readbacks(contract, manager, reporter)
+    _bind_genvm_chain_domain(record, views)
     _assert_progress(index + 1, views, reporter)
     record["completed_steps"] = index + 1
     record["checkpoint_stage"] = label
@@ -799,7 +831,8 @@ def test_deploy_and_smoke_finalized() -> None:
         "project": "theater-cue-recovery",
         "repository": REPOSITORY,
         "network_name": network_name,
-        "chain_id": network["chain_id"],
+        "configured_chain_id": network["configured_chain_id"],
+        "outer_rpc_chain_id": network["outer_rpc_chain_id"],
         "source_commit": source_commit,
         "source_sha256": source["sha256"],
         "abi_sha256": abi["sha256"],
@@ -830,6 +863,7 @@ def test_deploy_and_smoke_finalized() -> None:
             "constructor": constructor,
             "deployment_input_bytes": source["bytes"] + constructor["bytes"],
             "contract_address": "",
+            "genvm_chain_id": None,
             "completed_steps": 0,
             "checkpoint_stage": "PRE_DEPLOY",
             "pending_operation": None,
@@ -912,6 +946,7 @@ def test_deploy_and_smoke_finalized() -> None:
     reporter_contract: Any = contract.connect(reporter_account)
     if not record["latest_final_readbacks_sha256"]:
         views = _all_readbacks(contract, manager, reporter)
+        _bind_genvm_chain_domain(record, views)
         _assert_progress(0, views, reporter)
         record["latest_final_readbacks_sha256"] = _readback_hash(views)
         record["latest_final_checkpoint"] = {
@@ -926,7 +961,9 @@ def test_deploy_and_smoke_finalized() -> None:
         completed = int(record["completed_steps"])
         finalized_next = completed < len(STEPS) and STEPS[completed] in record["transactions"]
         if not finalized_next:
-            live_hash = _readback_hash(_all_readbacks(contract, manager, reporter))
+            live = _all_readbacks(contract, manager, reporter)
+            _bind_genvm_chain_domain(record, live)
+            live_hash = _readback_hash(live)
             if live_hash != record["latest_final_readbacks_sha256"]:
                 raise AssertionError("live LATEST_FINAL differs from resumable checkpoint")
 
@@ -956,12 +993,13 @@ def test_deploy_and_smoke_finalized() -> None:
         )
 
     final_views = _all_readbacks(contract, manager, reporter)
+    genvm_chain_id = _bind_genvm_chain_domain(record, final_views)
     lineage = _assert_final(
         final_views,
         manager,
         reporter,
         record["contract_address"],
-        int(record["chain_id"]),
+        genvm_chain_id,
     )
     if set(record["transactions"]) != {"deployment", *STEPS}:
         raise AssertionError("proof is missing a lifecycle receipt")
