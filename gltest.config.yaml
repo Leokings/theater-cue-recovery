@@ -2,7 +2,8 @@ networks:
   default: localnet
   localnet:
     url: "http://127.0.0.1:4000/api"
-  studionet: {}
+  studionet:
+    url: "https://explorer-studio.genlayer.com/api/rpc"
   testnet_bradbury: {}
 
 paths:

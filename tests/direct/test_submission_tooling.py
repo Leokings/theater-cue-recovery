@@ -219,6 +219,11 @@ def test_deploy_harness_records_outer_rpc_and_configured_chain_ids_independently
         def get_network_name(self):
             return self.name
 
+        def get_rpc_url(self):
+            if self.name == "localnet":
+                return "http://127.0.0.1:4000/api"
+            return "https://explorer-studio.genlayer.com/api/rpc"
+
     class Provider:
         def __init__(self, chain_id):
             self.chain_id = chain_id
@@ -239,6 +244,7 @@ def test_deploy_harness_records_outer_rpc_and_configured_chain_ids_independently
     assert local["outer_rpc_chain_id_verified"] is True
     assert local["outer_rpc_chain_id_matches_config"] is False
     assert local["outer_rpc_equality_required"] is False
+    assert local["rpc"] == "http://127.0.0.1:4000/api"
     assert local["genvm_chain_id"] is None
     assert "chain_id" not in local
 

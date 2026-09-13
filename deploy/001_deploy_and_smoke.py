@@ -232,6 +232,9 @@ def _network_record(general: Any) -> dict[str, Any]:
         raise AssertionError(
             f"{network_name} outer RPC chain ID differs from configuration"
         )
+    explorer = str(chain.block_explorers["default"]["url"])
+    if network_name == "studionet":
+        explorer = "https://explorer-studio.genlayer.com"
     return {
         "name": network_name,
         "chain_name": str(chain.name),
@@ -243,8 +246,8 @@ def _network_record(general: Any) -> dict[str, Any]:
         "genvm_chain_id": None,
         "genvm_chain_id_source": "PENDING_DEPLOYMENT_READBACK",
         "genvm_chain_id_verified_by_readbacks": False,
-        "rpc": _public_url(str(chain.rpc_urls["default"]["http"][0])),
-        "explorer": _public_url(str(chain.block_explorers["default"]["url"])),
+        "rpc": _public_url(str(general.get_rpc_url())),
+        "explorer": _public_url(explorer),
         "initial_validator_count": int(chain.default_number_of_initial_validators),
     }
 
