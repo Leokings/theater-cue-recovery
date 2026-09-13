@@ -127,7 +127,8 @@ def test_contract_uses_content_pinned_runner_and_mit_spdx():
     assert lines[0].startswith('# { "Depends": "py-genlayer:')
     assert "latest" not in lines[0].lower()
     assert "test" not in lines[0].lower()
-    assert lines[1] == "# SPDX-License-Identifier: MIT"
+    assert lines[1].startswith('"""')
+    assert "# SPDX-License-Identifier: MIT" in lines[:5]
 
 
 def test_committed_abi_matches_the_v2_public_surface():

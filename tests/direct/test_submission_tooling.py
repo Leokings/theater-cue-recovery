@@ -43,6 +43,11 @@ def test_deploy_harness_has_closed_network_and_lifecycle_fixtures(deploy_module)
         "choose_recovery",
         "acknowledge_recovery",
     ]
+    expected = deploy_module["EXPECTED"]
+    assert expected["decision_status"] == "MATCHED"
+    assert expected["anchor_index"] == 1
+    assert expected["anchor_cue"] == "CUE-CROSS"
+    assert expected["impact"] == "LOCAL"
 
 
 def test_runner_header_is_followed_by_module_docstring_not_comment():
@@ -51,11 +56,6 @@ def test_runner_header_is_followed_by_module_docstring_not_comment():
     ).splitlines()
     assert lines[0].startswith('# { "Depends": "py-genlayer:')
     assert lines[1].startswith('"""')
-    expected = deploy_module["EXPECTED"]
-    assert expected["decision_status"] == "MATCHED"
-    assert expected["anchor_index"] == 1
-    assert expected["anchor_cue"] == "CUE-CROSS"
-    assert expected["impact"] == "LOCAL"
 
 
 def test_deploy_harness_preflights_abi_and_requires_canonical_digests(deploy_module):
